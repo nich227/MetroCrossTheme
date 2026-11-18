@@ -5,6 +5,7 @@
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
 #include <HalDisplay.h>
+#include <HalPowerManager.h>
 #include <HalStorage.h>
 #include <I18n.h>
 #include <LibraryBuilder.h>
@@ -25,6 +26,13 @@
 #include "RecentBooksStore.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+
+namespace {
+// Jitter comes from the low bits of the clock, so tile flips are not evenly spaced.
+uint32_t nextMetroFlipDelay(const uint32_t now) {
+  return MetroHomeUi::FLIP_INTERVAL_MS + now % (MetroHomeUi::FLIP_JITTER_MS + 1);
+}
+}  // namespace
 
 int HomeActivity::getMenuItemCount() const {
   int count = 4;  // File Browser, Library, File transfer, Settings
@@ -236,13 +244,36 @@ void HomeActivity::onEnter() {
   hasPlugins = SETTINGS.pluginsEnabled != 0;
 
   const auto& metrics = UITheme::getInstance().getMetrics();
+  std::unique_ptr<MetroHomeUi> tileUi;
   if (UITheme::getInstance().hasCoverGridHome()) {
     // Screen-lifetime interaction tables and component properties exceed the stack budget.
     coverGridUi = makeUniqueNoThrow<CoverGridHomeUi>(renderer);
     if (!coverGridUi) LOG_ERR("HOME", "OOM: cover grid UI; using standard home");
+  } else if (UITheme::getInstance().hasMetroHome()) {
+    tileUi = makeUniqueNoThrow<MetroHomeUi>(renderer);
+    if (!tileUi) {
+      LOG_ERR("HOME", "OOM: tile home UI (%u bytes); using standard home", (unsigned)sizeof(MetroHomeUi));
+    }
   }
   loadRecentBooks(coverGridUi ? CoverGridHomeUi::MAX_BOOKS : metrics.homeRecentBooksCount);
   hasContinueReading = !recentBooks.empty();
+  if (tileUi) {
+    const Rect content = UITheme::getContentArea(renderer);
+    // Tiles fill the content area between the status band and the button hints.
+    // The library slot shows Plugins when the plugin system is on, otherwise OPDS.
+    tileUi->begin(recentBooks,
+                  hasPlugins       ? MetroHomeUi::Slot::PLUGINS
+                  : hasOpdsServers ? MetroHomeUi::Slot::OPDS
+                                   : MetroHomeUi::Slot::NONE,
+                  Rect{content.x, metrics.homeTopPadding, content.width,
+                       content.y + content.height - metrics.buttonHintsHeight - metrics.homeTopPadding});
+    // A clean first refresh is slow enough without an extra frame before it.
+    if (!cleanInitialRefresh) tileUi->startEnter();
+    // A render left over from the last screen can run during onEnter(): it
+    // must not see tiles that are not laid out yet.
+    RenderLock lock;
+    metroUi = std::move(tileUi);
+  }
   if (coverGridUi) {
     fillCoverGridFromLibrary();
     resolveGridCoverPaths();
@@ -260,6 +291,7 @@ void HomeActivity::onExit() {
   Activity::onExit();
 
   coverGridUi.reset();
+  metroUi.reset();
 
   // Free the stored cover buffer if any
   freeCoverBuffer();
@@ -332,21 +364,40 @@ void HomeActivity::loop() {
     }
   };
 
+  if (metroExit == MetroExit::Opened) {
+    // Still running a pass later: the target did not open, or its start is
+    // delayed. Take input again and show the normal tiles if Home is repainted.
+    metroExit = MetroExit::None;
+    metroExitTile = -1;
+    requestUpdate();
+    return;
+  }
+  if (metroExit == MetroExit::Animating) {
+    if (metroExitShown.load() || metroClickOrTap()) {
+      metroExit = MetroExit::Opened;
+      activateSelection();
+    }
+    return;
+  }
+
   // Cover grid home splits navigation by button group (see below); the flat
-  // next/previous cycle is for the classic list home only.
+  // next/previous cycle is for the classic list home and the tile home.
   if (!coverGridUi) {
     buttonNavigator.onNext([this, menuCount] {
       selectorIndex = ButtonNavigator::nextIndex(selectorIndex, menuCount);
+      noteMetroInput();
       requestUpdate();
     });
 
     buttonNavigator.onPrevious([this, menuCount] {
       selectorIndex = ButtonNavigator::previousIndex(selectorIndex, menuCount);
+      noteMetroInput();
       requestUpdate();
     });
   }
 
   const auto swipe = mappedInput.wasSwipe();
+  if (swipe != MappedInputManager::SwipeDir::None) noteMetroInput();
   if (swipe == MappedInputManager::SwipeDir::Up) {
     selectorIndex = ButtonNavigator::nextIndex(selectorIndex, menuCount);
     requestUpdate();
@@ -362,6 +413,13 @@ void HomeActivity::loop() {
   // book directly (recentBooks is most-recent-first and already pruned of
   // files missing from the SD card).
   if (mappedInput.wasReleased(MappedInputManager::Button::Back) && hasContinueReading && !recentBooks.empty()) {
+    if (metroUi) {
+      // The book is the first tile; it is the one that opens.
+      selectorIndex = 0;
+      noteMetroInput();
+      startMetroExit();
+      return;
+    }
     onRecentBookSelected(recentBooks[0].path);
     return;
   }
@@ -404,6 +462,29 @@ void HomeActivity::loop() {
       const int bookCount = static_cast<int>(recentBooks.size());
       cycleBand(bookCount, getMenuItemCount() - bookCount, +1);
     });
+    return;
+  }
+
+  if (metroUi) {
+    int tapX = 0;
+    int tapY = 0;
+    const bool tapped = mappedInput.wasScreenTapped(tapX, tapY);
+    const bool confirmed = mappedInput.wasReleased(MappedInputManager::Button::Confirm);
+    if (tapped || confirmed || mappedInput.wasReleased(MappedInputManager::Button::Back)) noteMetroInput();
+    if (tapped) {
+      const int touched = metroUi->tileAt(tapX, tapY);
+      if (touched >= 0 && touched < menuCount) {
+        selectorIndex = touched;
+        haptic_feedback::touchAction();
+        startMetroExit();
+      }
+      return;
+    }
+    if (confirmed) {
+      startMetroExit();
+      return;
+    }
+    updateMetroFlipTimer();
     return;
   }
 
@@ -464,6 +545,10 @@ void HomeActivity::loop() {
 }
 
 void HomeActivity::render(RenderLock&&) {
+  // The last exit frame is on the panel. A late request must not paint it
+  // again, or clear the framebuffer: the next screen may draw a popup over it.
+  if (metroExitTile.load() >= 0 && metroExitShown.load()) return;
+
   const auto& metrics = UITheme::getInstance().getMetrics();
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
@@ -498,6 +583,43 @@ void HomeActivity::render(RenderLock&&) {
       loadRecentCovers(CoverGridHomeUi::THUMB_HEIGHT);
       coverGridUi->refreshCoverPaths();
       requestUpdate();
+    }
+    return;
+  }
+  if (metroUi) {
+    // Requests from loop() are applied here, on the task that draws the tiles.
+    const int exitTile = metroExitTile.load();
+    const bool leaving = exitTile >= 0;
+    const bool endAnimation = metroEndAnimation.exchange(false);
+    if (leaving) {
+      metroUi->startExit(exitTile);
+    } else if (endAnimation || metroUi->exitActive()) {
+      // Input ends a flip or the enter animation. An exit without a request was called off.
+      metroUi->finishFlip();
+      metroUi->endTransition();
+    }
+    GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.homeTopPadding - metrics.topPadding},
+                   nullptr, nullptr, false);
+    metroUi->setSelection(leaving ? exitTile : selectorIndex);
+    metroUi->render();
+    // The selection walks the tiles in reading order, so the hints name the order, not a direction.
+    const auto labels = mappedInput.mapLabels(recentBooks.empty() ? "" : tr(STR_RESUME), tr(STR_SELECT),
+                                              tr(STR_METRO_PREV), tr(STR_METRO_NEXT));
+    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    renderer.displayBuffer(cleanInitialRefresh && !firstRenderDone ? HalDisplay::HALF_REFRESH
+                                                                   : HalDisplay::FAST_REFRESH);
+    firstRenderDone = true;
+    const bool moreFrames = metroUi->advanceTransition() || metroUi->advanceFlip();
+    // Runs once, after the enter animation and unless Home is being left: its
+    // popup must not cover a half-drawn grid. It requests the repaint itself
+    // when it had to generate a thumbnail.
+    if (!leaving && !metroUi->transitionActive() && !recentsLoaded && !recentsLoading) {
+      loadRecentCovers(metroUi->coverThumbHeight());
+    }
+    if (moreFrames) {
+      requestUpdate();
+    } else if (leaving) {
+      metroExitShown = true;
     }
     return;
   }
@@ -563,6 +685,74 @@ void HomeActivity::render(RenderLock&&) {
     const int themeThumbHeight = GUI.homeCoverThumbHeight(renderer);
     loadRecentCovers(themeThumbHeight > 0 ? themeThumbHeight : metrics.homeCoverHeight);
   }
+}
+
+void HomeActivity::noteMetroInput() {
+  if (!metroUi) return;
+  metroEndAnimation = true;
+  metroIdleFlips = 0;
+  if (metroFlipDelayMs != 0) {
+    metroFlipTimerMs = millis();
+    metroFlipDelayMs = nextMetroFlipDelay(metroFlipTimerMs);
+  }
+}
+
+void HomeActivity::updateMetroFlipTimer() {
+  if (metroIdleFlips >= MetroHomeUi::MAX_IDLE_FLIPS) return;
+  const uint32_t now = millis();
+  if (metroFlipDelayMs != 0 && now - metroFlipTimerMs < metroFlipDelayMs) return;
+  // A frame in progress holds the lock for the whole panel refresh. Waiting
+  // for it here would stall input polling, so try again on a later pass.
+  RenderLock lock(RenderLock::Mode::Try);
+  if (!lock.ownsLock()) return;
+  // render() writes these two flags; read them only under the lock.
+  if (!firstRenderDone || !recentsLoaded) return;
+  // No flip before the enter animation has shown the tiles, or over an exit that render() has yet to call off.
+  if (metroUi->transitionActive()) return;
+  if (metroFlipDelayMs == 0) {
+    metroFlipTimerMs = now;
+    metroFlipDelayMs = MetroHomeUi::FIRST_FLIP_DELAY_MS;
+    return;
+  }
+  // The previous flip still has frames to draw.
+  if (metroUi->flipActive()) return;
+  if (!metroLiveDataRequested) {
+    metroLiveDataRequested = true;
+    // The CPU is in its idle low-power mode by now; read the card at full speed.
+    HalPowerManager::Lock powerLock;
+    metroUi->loadLiveData();
+  }
+  // Input from before this flip must not cut it short.
+  metroEndAnimation = false;
+  if (!metroUi->startFlip()) {
+    // Nothing can flip: stop until the next input.
+    metroIdleFlips = MetroHomeUi::MAX_IDLE_FLIPS;
+    return;
+  }
+  ++metroIdleFlips;
+  metroFlipTimerMs = millis();
+  metroFlipDelayMs = nextMetroFlipDelay(metroFlipTimerMs);
+  requestUpdate();
+}
+
+void HomeActivity::startMetroExit() {
+  metroExit = MetroExit::Animating;
+  metroExitShown = false;
+  metroExitTile = static_cast<int8_t>(selectorIndex);
+  requestUpdate();
+}
+
+bool HomeActivity::metroClickOrTap() const {
+  using Button = MappedInputManager::Button;
+  // Release edges, so the click is over before the next screen reads input.
+  static constexpr Button BUTTONS[] = {Button::Back,  Button::Confirm, Button::Left,
+                                       Button::Right, Button::Up,      Button::Down};
+  for (const Button button : BUTTONS) {
+    if (mappedInput.wasReleased(button)) return true;
+  }
+  int x = 0;
+  int y = 0;
+  return mappedInput.wasScreenTapped(x, y);
 }
 
 void HomeActivity::onRecentBookSelected(const std::string& path) { activityManager.goToReader(path); }

@@ -1,0 +1,21 @@
+# Manifest for src/components/icons/metroIcons.h. Regenerate from the repository root with:
+#   python3 freeink-sdk/libs/assets/Icons/tools/gen_icons.py \
+#     --manifest src/components/icons/metroIcons.manifest \
+#     --svgdir src/components/icons/antdesign \
+#     --sizes 48,96 --out src/components/icons/metroIcons.h
+#   perl -pi -e 's/from Lucide SVGs/from Ant Design SVGs/; s/\(lucide: /(ant design: /' \
+#     src/components/icons/metroIcons.h
+# then run ./bin/clang-format-fix -g.
+# The SVGs are Ant Design icons, copied unchanged. License and copyright
+# notice: src/components/icons/antdesign/LICENSE.
+# The header is included by MetroHomeUi.cpp alone, so a size that file does
+# not reference costs no flash.
+metro-folder = folder-open-filled
+metro-library = book-filled
+metro-book = read-filled
+metro-settings = setting-filled
+metro-transfer = swap-outlined
+metro-plugins = api-filled
+metro-catalog = global-outlined
+metro-clock = clock-circle-filled
+metro-calendar = calendar-filled

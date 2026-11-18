@@ -1,4 +1,5 @@
 #pragma once
+#include <atomic>
 #include <functional>
 #include <vector>
 
@@ -6,12 +7,33 @@
 #include "RecentBooksStore.h"
 #include "activities/Activity.h"
 #include "components/CoverGridHomeUi.h"
+#include "components/MetroHomeUi.h"
 #include "util/ButtonNavigator.h"
 
 struct Rect;
 
 class HomeActivity final : public Activity {
   std::unique_ptr<CoverGridHomeUi> coverGridUi;
+  // Tile home. It copies what it shows from recentBooks in begin().
+  std::unique_ptr<MetroHomeUi> metroUi;
+  // Set by loop() on any input; the next render() ends a running tile flip or enter animation.
+  std::atomic<bool> metroEndAnimation{false};
+  // Leaving Home through a tile. Used by loop() only.
+  enum class MetroExit : uint8_t {
+    None,
+    Animating,  // render() is showing the exit frames; input only cuts them short
+    Opened      // the target was asked to open; it replaces Home before the next loop()
+  };
+  MetroExit metroExit = MetroExit::None;
+  // Selection index of the tile whose exit animation render() must play, or -1. Written by loop().
+  std::atomic<int8_t> metroExitTile{-1};
+  // Set by render() when the last exit frame is on the panel; cleared by loop().
+  std::atomic<bool> metroExitShown{false};
+  // Idle tile-flip timer. Used by loop() only.
+  uint32_t metroFlipTimerMs = 0;  // Start of the current wait
+  uint32_t metroFlipDelayMs = 0;  // 0 until the first paint and the cover pass are done
+  uint8_t metroIdleFlips = 0;     // Flips since the last input
+  bool metroLiveDataRequested = false;
   ButtonNavigator buttonNavigator;
   int selectorIndex = 0;
   bool recentsLoading = false;
@@ -80,6 +102,12 @@ class HomeActivity final : public Activity {
   void fillCoverGridFromLibrary();
   void resolveGridCoverPaths();
   void loadGridCover(RecentBook& book, int height, bool& showingLoading, Rect& popupRect);
+  void noteMetroInput();
+  void updateMetroFlipTimer();
+  // Plays the exit animation for the selected tile; loop() opens its target afterwards.
+  void startMetroExit();
+  // A finished button click or a tap in this input frame.
+  bool metroClickOrTap() const;
 
  public:
   explicit HomeActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
