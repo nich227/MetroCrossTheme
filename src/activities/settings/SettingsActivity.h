@@ -202,7 +202,8 @@ class SettingsActivity final : public UiListActivity {
   void rebuildRowItems();
   void toggleSelectedSetting();
   void openSleepTimeoutPicker();
-  void applyUiSettingChange(uint8_t CrossPointSettings::* valuePtr);
+  // `changed` is false when the user confirmed the value that was already set.
+  void applyUiSettingChange(uint8_t CrossPointSettings::* valuePtr, bool changed = true);
   void syncQuickResumeTimeoutForSleepScreen(bool sleepScreenChanged, bool quickResumeTimeoutChanged);
   static std::string settingValueText(const SettingInfo& setting);
 

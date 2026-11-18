@@ -195,11 +195,19 @@ void SettingsActivity::activateIndex(const int index) {
   requestUpdate();
 }
 
-void SettingsActivity::applyUiSettingChange(uint8_t CrossPointSettings::* valuePtr) {
+void SettingsActivity::applyUiSettingChange(uint8_t CrossPointSettings::* valuePtr, const bool changed) {
   // Theme changes take effect immediately, on this screen — reload the theme
   // and re-derive the app's tokens so the very next repaint is in the new look.
   if (valuePtr != &CrossPointSettings::uiTheme) {
     return;
+  }
+  if (changed && SETTINGS.uiTheme == CrossPointSettings::METRO &&
+      SETTINGS.hideBatteryPercentage != CrossPointSettings::HIDE_ALWAYS) {
+    // Metro's status band shows the battery glyph alone. Changing to the theme
+    // sets that once; the Hide Battery % row changes it back.
+    SETTINGS.hideBatteryPercentage = CrossPointSettings::HIDE_ALWAYS;
+    SETTINGS.saveToFile();
+    rebuildSettings();
   }
   UITheme::getInstance().reload();
   // Re-derive the shared tokens for the new look; the gate stays closed until
@@ -237,12 +245,12 @@ void SettingsActivity::toggleSelectedSetting() {
     if (enumLabels.size() > 2) {
       const auto valuePtr = setting.valuePtr;
       optionPopup.show(setting.nameId, enumLabels.data(), static_cast<int>(enumLabels.size()), currentValue,
-                       [this, valuePtr, sleepScreenChanged, quickResumeTimeoutChanged](int idx) {
+                       [this, valuePtr, currentValue, sleepScreenChanged, quickResumeTimeoutChanged](int idx) {
                          SETTINGS.*valuePtr = idx;
                          syncQuickResumeTimeoutForSleepScreen(sleepScreenChanged, quickResumeTimeoutChanged);
                          SETTINGS.saveToFile();
                          rebuildSettings();
-                         applyUiSettingChange(valuePtr);
+                         applyUiSettingChange(valuePtr, idx != currentValue);
                        });
       requestUpdate();
       return;
