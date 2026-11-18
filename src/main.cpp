@@ -22,6 +22,7 @@
 #include <WiFi.h>
 #include <XteinkDetect.h>
 #include <builtinFonts/all.h>
+#include <builtinFonts/metroFonts.h>
 #include <esp_heap_caps.h>
 #include <esp_wifi.h>
 #include <time.h>
@@ -45,7 +46,9 @@
 #include "activities/settings/SdFirmwareUpdateActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "metroFontIds.h"
 #include "platform/UsbSerialJtagHandoff.h"
+#include "uiFontSet.h"
 #include "util/ButtonNavigator.h"
 #include "util/PluginEvents.h"
 #include "util/ScreenshotUtil.h"
@@ -119,6 +122,57 @@ EpdFontFamily ui10FontFamily(10, &ui10RegularFont, &ui10BoldFont);
 EpdFont ui12RegularFont(&ubuntu_12_regular);
 EpdFont ui12BoldFont(&ubuntu_12_bold);
 EpdFontFamily ui12FontFamily(12, &ui12RegularFont, &ui12BoldFont);
+
+#if CROSSPOINT_METRO_FONTS
+// Light fonts of the Metro theme, for tile numbers and page titles. One face serves both styles.
+EpdFont metroNumberFont(&segoeui_18_numbers);
+EpdFontFamily metroNumberFontFamily(18, &metroNumberFont, &metroNumberFont);
+EpdFont metroNumberLargeFont(&segoeui_24_numbers);
+EpdFontFamily metroNumberLargeFontFamily(24, &metroNumberLargeFont, &metroNumberLargeFont);
+
+namespace {
+// The UI font families stay registered and point at these EpdFont objects, so
+// changing a font's glyph data changes what its font ID draws.
+struct UiFontFace {
+  EpdFont* font;
+  const EpdFontData* ubuntu;
+  const EpdFontData* segoe;
+};
+const UiFontFace UI_FONT_FACES[] = {
+    {&smallFont, &ubuntu_8_regular, &segoeui_8_regular},    {&ui10RegularFont, &ubuntu_10_regular, &segoeui_10_regular},
+    {&ui10BoldFont, &ubuntu_10_bold, &segoeui_10_semibold}, {&ui12RegularFont, &ubuntu_12_regular, &segoeui_12_regular},
+    {&ui12BoldFont, &ubuntu_12_bold, &segoeui_12_semibold},
+};
+
+bool uiFontsRegistered = false;  // set once the renderer has the UI font families
+bool metroUiFontsWanted = false;
+bool metroUiFontsActive = false;
+
+// The render task reads glyph data while it draws, so the data changes only
+// under the render lock. Returns false when the lock is taken, by a running
+// render or by this task; loop() then tries again.
+bool applyUiFontSet() {
+  if (!uiFontsRegistered || metroUiFontsWanted == metroUiFontsActive) return true;
+  RenderLock lock(RenderLock::Mode::Try);
+  if (!lock.ownsLock()) return false;
+  for (const auto& face : UI_FONT_FACES) {
+    face.font->data = metroUiFontsWanted ? face.segoe : face.ubuntu;
+  }
+  metroUiFontsActive = metroUiFontsWanted;
+  LOG_DBG("MAIN", "UI fonts: %s", metroUiFontsActive ? "Segoe UI" : "Ubuntu");
+  return true;
+}
+}  // namespace
+#endif  // CROSSPOINT_METRO_FONTS
+
+void useMetroUiFonts(const bool enabled) {
+#if CROSSPOINT_METRO_FONTS
+  metroUiFontsWanted = enabled;
+  applyUiFontSet();
+#else
+  (void)enabled;
+#endif
+}
 
 // Definitions for SilentRestart.h. RTC_NOINIT survives ESP.restart() but not power loss.
 RTC_NOINIT_ATTR uint32_t silentRebootMagic;
@@ -556,6 +610,13 @@ void setupDisplayAndFonts(bool seamless = false) {
   renderer.insertFont(UI_10_FONT_ID, ui10FontFamily);
   renderer.insertFont(UI_12_FONT_ID, ui12FontFamily);
   renderer.insertFont(SMALL_FONT_ID, smallFontFamily);
+#if CROSSPOINT_METRO_FONTS
+  renderer.insertFont(METRO_NUMBER_FONT_ID, metroNumberFontFamily);
+  renderer.insertFont(METRO_NUMBER_LARGE_FONT_ID, metroNumberLargeFontFamily);
+  // The saved theme is loaded before the fonts are registered; give it its fonts now.
+  uiFontsRegistered = true;
+  applyUiFontSet();
+#endif
 
   // Discover and load SD card fonts
   sdFontSystem.begin(renderer);
@@ -1079,6 +1140,11 @@ void loop() {
   const unsigned long activityStartTime = millis();
   activityManager.loop();
   const unsigned long activityDuration = millis() - activityStartTime;
+
+#if CROSSPOINT_METRO_FONTS
+  // A font change that found the render lock taken; the screen needs a repaint with the new fonts.
+  if (metroUiFontsWanted != metroUiFontsActive && applyUiFontSet()) activityManager.requestUpdate(true);
+#endif
 
   const unsigned long loopDuration = millis() - loopStartTime;
   if (loopDuration > maxLoopDuration) {

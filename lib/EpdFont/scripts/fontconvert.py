@@ -20,6 +20,7 @@ parser.add_argument("size", type=int, help="font size to use.")
 parser.add_argument("fontstack", action="store", nargs='+', help="list of font files, ordered by descending priority.")
 parser.add_argument("--2bit", dest="is2Bit", action="store_true", help="generate 2-bit greyscale bitmap instead of 1-bit black and white.")
 parser.add_argument("--additional-intervals", dest="additional_intervals", action="append", help="Additional code point intervals to export as min,max. This argument can be repeated.")
+parser.add_argument("--no-default-intervals", dest="no_default_intervals", action="store_true", help="Export only the intervals given with --additional-intervals, without the built-in Latin/Cyrillic/symbol set. For small fonts such as digits-only faces.")
 parser.add_argument("--compress", dest="compress", action="store_true", help="Compress glyph bitmaps using DEFLATE with group-based compression.")
 parser.add_argument("--zopfli", dest="zopfli", action="store_true", help="Use Zopfli for the DEFLATE backend instead of zlib. Produces standard raw-DEFLATE streams (decoded unchanged by the on-device uzlib inflater), typically a few percent smaller than zlib -9, at the cost of much slower compression. Requires --compress and the 'zopfli' package.")
 parser.add_argument("--force-autohint", dest="force_autohint", action="store_true", help="Force FreeType auto-hinter instead of native font hinting. Improves stem width consistency for fonts with weak or no native TrueType hints.")
@@ -139,6 +140,11 @@ intervals = [
     # Replacement Character
     (0xFFFD, 0xFFFD),
 ]
+
+if args.no_default_intervals:
+    if not args.additional_intervals:
+        sys.exit("--no-default-intervals needs at least one --additional-intervals")
+    intervals = []
 
 add_ints = []
 if args.additional_intervals:

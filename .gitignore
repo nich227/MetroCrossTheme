@@ -33,3 +33,6 @@ lib/EpdFont/scripts/output/
 sdkconfig.sticky
 sdkconfig.x4pro
 flake.*
+
+# Segoe UI glyph data for the Metro theme: proprietary, generated locally
+lib/EpdFont/builtinFonts/segoeui_*.h
