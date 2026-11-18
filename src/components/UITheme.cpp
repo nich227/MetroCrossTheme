@@ -20,23 +20,30 @@
 #include "components/themes/roundedraff/RoundedRaffTheme.h"
 #include "uiFontSet.h"
 
+namespace {
+bool stockLook = false;
+
+CrossPointSettings::UI_THEME activeThemeType() {
+  const auto saved = static_cast<CrossPointSettings::UI_THEME>(SETTINGS.uiTheme);
+  return stockLook && saved == CrossPointSettings::METRO ? CrossPointSettings::LYRA : saved;
+}
+}  // namespace
+
 UITheme UITheme::instance;
 
-UITheme::UITheme() {
-  auto themeType = static_cast<CrossPointSettings::UI_THEME>(SETTINGS.uiTheme);
-  setTheme(themeType);
-}
+UITheme::UITheme() { setTheme(activeThemeType()); }
 
-void UITheme::reload() {
-  auto themeType = static_cast<CrossPointSettings::UI_THEME>(SETTINGS.uiTheme);
-  setTheme(themeType);
-}
+void UITheme::reload() { setTheme(activeThemeType()); }
+
+void UITheme::setStockLookSession(const bool enabled) { stockLook = enabled; }
+
+bool UITheme::stockLookSession() { return stockLook; }
 
 bool UITheme::supportsCoverGrid() { return HalMemory::getPsramHeap().totalBytes > 0; }
 
 bool UITheme::hasCoverGridHome() { return SETTINGS.uiTheme == CrossPointSettings::COVER_GRID && supportsCoverGrid(); }
 
-bool UITheme::hasMetroHome() { return SETTINGS.uiTheme == CrossPointSettings::METRO; }
+bool UITheme::hasMetroHome() { return activeThemeType() == CrossPointSettings::METRO; }
 
 void UITheme::drawCoverGridHome(CoverGridHomeUi& home) { home.renderUi(); }
 

@@ -44,6 +44,11 @@ class UITheme {
   static bool supportsCoverGrid();
   static bool hasCoverGridHome();
   static bool hasMetroHome();
+  // While set, the Metro theme is shown as Lyra and the Lock Screen sleep mode
+  // as Dark, whatever is saved. Set for the session that follows a crash;
+  // cleared when the user picks a theme.
+  static void setStockLookSession(bool enabled);
+  static bool stockLookSession();
   static void drawCoverGridHome(CoverGridHomeUi& home);
   void reload();
   void setTheme(CrossPointSettings::UI_THEME type);

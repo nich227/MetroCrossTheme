@@ -642,7 +642,7 @@ void setup() {
 
   // Before anything else that could fail: after two failed starts in a row this
   // goes back to the firmware in the other app slot and does not return.
-  boot_fallback::checkAtBoot();
+  const bool followsFailedStart = boot_fallback::checkAtBoot();
 
   HalSystem::begin();
   // checkPanic() clears the watchdog capture marker after a successful SD
@@ -727,6 +727,9 @@ void setup() {
     SETTINGS.readerMenuStyle = CrossPointSettings::READER_MENU_TOOLBAR;
   }
   SETTINGS.loadFromFile();
+  // The Metro theme or its sleep screen may be what failed: run this session on
+  // the stock ones, so the device stays usable. The saved choice is not changed.
+  if (rebootedFromPanic || followsFailedStart) UITheme::setStockLookSession(true);
   // Push the saved timezone's POSIX rule into the clock (migrating the legacy
   // UTC-offset setting on first boot after the update).
   timezones::applyToClock();

@@ -201,6 +201,8 @@ void SettingsActivity::applyUiSettingChange(uint8_t CrossPointSettings::* valueP
   if (valuePtr != &CrossPointSettings::uiTheme) {
     return;
   }
+  // The user picked a theme: it is shown even in the session after a crash.
+  UITheme::setStockLookSession(false);
   if (changed && SETTINGS.uiTheme == CrossPointSettings::METRO &&
       SETTINGS.hideBatteryPercentage != CrossPointSettings::HIDE_ALWAYS) {
     // Metro's status band shows the battery glyph alone. Changing to the theme

@@ -758,7 +758,7 @@ void SleepActivity::onEnter() {
         return renderCustomSleepScreen();
       }
     case (CrossPointSettings::SLEEP_SCREEN_MODE::LOCK_SCREEN):
-      return renderLockSleepScreen();
+      return UITheme::stockLookSession() ? renderDefaultSleepScreen() : renderLockSleepScreen();
     default:
       return renderDefaultSleepScreen();
   }
