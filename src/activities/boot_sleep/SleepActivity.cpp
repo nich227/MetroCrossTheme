@@ -26,6 +26,7 @@
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "activities/reader/ReaderUtils.h"
+#include "components/LockWallpaper.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "images/Logo120.h"
@@ -61,6 +62,13 @@ bool useOriginalCoverThresholds(const GfxRenderer& renderer) {
   return renderer.grayscaleCapabilities(sleepGrayscaleMode(renderer)).supported() &&
          display.getController() == HalDisplay::Controller::SSD1677 &&
          SETTINGS.sleepScreenCoverFilter == CrossPointSettings::SLEEP_SCREEN_COVER_FILTER::NO_FILTER;
+}
+
+// The cover filter is for covers and custom images; the generated wallpaper always keeps its grays.
+uint8_t sleepImageFilter() {
+  return SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::LOCK_SCREEN
+             ? static_cast<uint8_t>(CrossPointSettings::SLEEP_SCREEN_COVER_FILTER::NO_FILTER)
+             : SETTINGS.sleepScreenCoverFilter;
 }
 
 // Kept separate from normal custom sleep sources so alpha-overlay art does not mix with full-screen wallpapers.
@@ -749,6 +757,8 @@ void SleepActivity::onEnter() {
       } else {
         return renderCustomSleepScreen();
       }
+    case (CrossPointSettings::SLEEP_SCREEN_MODE::LOCK_SCREEN):
+      return renderLockSleepScreen();
     default:
       return renderDefaultSleepScreen();
   }
@@ -815,6 +825,18 @@ void SleepActivity::renderCustomSleepScreen() const {
   renderDefaultSleepScreen();
 }
 
+void SleepActivity::renderLockSleepScreen() const {
+  char path[LockWallpaper::PATH_SIZE];
+  HalFile file;
+  if (LockWallpaper::ensureFile(renderer.getScreenWidth(), renderer.getScreenHeight(), path, sizeof(path)) &&
+      Storage.openFileForRead("SLP", path, file)) {
+    Bitmap bitmap(file);
+    if (bitmap.parseHeaders() == BmpReaderError::Ok) return renderBitmapSleepScreen(bitmap);
+  }
+  LOG_ERR("SLP", "Lock screen wallpaper unavailable; showing the default sleep screen");
+  renderDefaultSleepScreen();
+}
+
 // Sleep screens paint with a single HALF refresh (stock parity): the OEM X4
 // firmware's only clean refresh in normal operation is the single-pass 0xD7
 // sequence, used once for the sleep image. It never runs the multi-flash GC
@@ -849,9 +871,9 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap, const bool pre
   LOG_DBG("SLP", "drawing to %d x %d", x, y);
   if (!preserveBackground) renderer.clearScreen();
 
-  const bool hasGreyscale = (bitmap.hasGreyscale() || (preserveBackground && overlayGrayCover)) &&
-                            (preserveBackground || SETTINGS.sleepScreenCoverFilter ==
-                                                       CrossPointSettings::SLEEP_SCREEN_COVER_FILTER::NO_FILTER);
+  const bool hasGreyscale =
+      (bitmap.hasGreyscale() || (preserveBackground && overlayGrayCover)) &&
+      (preserveBackground || sleepImageFilter() == CrossPointSettings::SLEEP_SCREEN_COVER_FILTER::NO_FILTER);
 
   if (!renderer.drawBitmap(bitmap, x, y, pageWidth, pageHeight, cropX, cropY, preserveBackground)) {
     renderer.displayBuffer(kSleepClean);
@@ -859,7 +881,7 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap, const bool pre
   }
 
   if (!preserveBackground &&
-      SETTINGS.sleepScreenCoverFilter == CrossPointSettings::SLEEP_SCREEN_COVER_FILTER::INVERTED_BLACK_AND_WHITE) {
+      sleepImageFilter() == CrossPointSettings::SLEEP_SCREEN_COVER_FILTER::INVERTED_BLACK_AND_WHITE) {
     renderer.invertScreen();
   }
 
