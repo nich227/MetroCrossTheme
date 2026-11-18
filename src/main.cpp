@@ -31,6 +31,7 @@
 #include <cstdarg>
 #include <cstring>
 
+#include "BootFallback.h"
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "KOReaderCredentialStore.h"
@@ -639,6 +640,10 @@ void setup() {
 #endif
 #endif
 
+  // Before anything else that could fail: after two failed starts in a row this
+  // goes back to the firmware in the other app slot and does not return.
+  boot_fallback::checkAtBoot();
+
   HalSystem::begin();
   // checkPanic() clears the watchdog capture marker after a successful SD
   // dump, so retain the boot classification for the later activity route.
@@ -908,6 +913,7 @@ void setup() {
 }
 
 void loop() {
+  boot_fallback::noteLoopPass();
   static unsigned long maxLoopDuration = 0;
   const unsigned long loopStartTime = millis();
   static unsigned long lastMemPrint = 0;
