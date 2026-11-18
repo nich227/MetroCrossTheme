@@ -49,7 +49,7 @@ Check [our Devices page](https://crosspointreader.com/devices) for the full list
   - OPDS browser with saved servers (up to 8), search, pagination, and direct download
   - OTA update checks and installs from GitHub releases
 
-- **Customization**: night mode, multiple themes (Classic, Lyra, Lyra Extended, RoundedRaff), sleep screen modes including transparent overlays, front/side button remapping, status bar controls, power-button behavior, refresh cadence, and more.
+- **Customization**: night mode, multiple themes (Classic, Lyra, Lyra Extended, RoundedRaff, Metro), sleep screen modes including transparent overlays, front/side button remapping, status bar controls, power-button behavior, refresh cadence, and more.
 
 - **Localization**: 34 UI languages and counting, including CJK font fallback and RTL support.
 
@@ -131,6 +131,109 @@ esptool.py --chip esp32s3 --port /dev/ttyACM0 --baud 921600 write_flash 0x10000 
 ### Manual
 
 See [Development quick start](#development-quick-start) below.
+
+## Metro theme build
+
+This tree is CrossPoint 2.0.0 with these additions:
+
+- The Metro theme has a flat style based on the Windows Phone 8 Start screen. The Home screen uses a grid of tiles in different tones of gray. The tiles turn over to show more information and swing away when you open one.
+- Lock Screen sleep mode uses a gray triangle mosaic that the device generates automatically.
+- Startup fallback returns the device to the firmware it ran before the update when the current firmware fails to start twice in a row.
+
+The firmware reports its version as `2.0.0-metro.1` on the start screen and in Settings. **Check for updates** compares only the three numbers, so it does not offer official 2.0.0. It offers a later official release, and installing that release removes the additions.
+
+The additions are not part of official CrossPoint. Their test status is:
+
+| Device | Status |
+| --- | --- |
+| Xteink X3 | Runs on the device |
+| Xteink X4 | Runs in the desktop simulator only |
+| All other devices | The firmware compiles, but it has not run on these devices |
+
+### Compile the firmware
+
+You need Git, Python 3.10 or newer, and about 10 GB of free disk space. The first build downloads the compiler and takes several minutes.
+
+```bash
+# In the root of this repository
+git submodule update --init --recursive
+
+python3 -m venv .venv
+. .venv/bin/activate
+pip install https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+
+pio run -e gh_release
+```
+
+Use the environment for your device:
+
+| Device | Environment (`-e`) | Chip |
+| --- | --- | --- |
+| Xteink X3, Xteink X4 | `gh_release` | ESP32-C3 |
+| Xteink X4 Pro | `x4pro-gh_release` | ESP32-S3 |
+| Xteink X4 Classic | `x4c-gh_release` | ESP32-S3 |
+| Seeed reTerminal Sticky | `sticky-gh_release` | ESP32-S3 |
+| M5PaperMono | `papermono-gh_release` | ESP32-S3 |
+| Metalio E-Ink 4 | `metalio_eink4-gh_release` | ESP32-S3 |
+| EEGOREAD A4 | `eego_a4-gh_release` | ESP32-S3 |
+| Boox Picco | `picco-gh_release` | ESP32-S3 |
+
+The firmware file is `.pio/build/<environment>/firmware.bin`. Give it a name that tells it apart from an official file, for example `metro-crosspoint-2.0.0-x3-x4.bin`.
+
+If the build stops because a Python module is missing, install the modules that `.github/workflows/release.yml` lists in its "Install PlatformIO Core" step.
+
+### Optional: Segoe UI fonts
+
+The Metro theme is designed for Segoe UI. Segoe UI is a Microsoft font and is not in this repository, so a normal build uses the Ubuntu fonts of the other themes. Page titles then keep the standard header, and the numbers on the tiles use Noto Sans.
+
+To build with Segoe UI, use your own licensed copy of the fonts:
+
+1. Copy `SegoeUI-Regular.ttf`, `SegoeUI-Semibold.ttf` and `SegoeUI-Light.ttf` into `lib/EpdFont/builtinFonts/source/SegoeUI/`.
+2. Run:
+
+   ```bash
+   pip install -r lib/EpdFont/scripts/requirements.txt
+   lib/EpdFont/scripts/convert-metro-fonts.sh
+   ```
+
+3. Compile again.
+
+Do not publish the generated `segoeui_*.h` files or a firmware file that contains them.
+
+### Install the firmware
+
+Read [USB-locked devices](#usb-locked-devices-xteink-unlocker) first. You can update a USB-locked device only from the SD card. If the firmware cannot start on a USB-locked device, you must open the device to repair it.
+
+**From the SD card.** This works on every device that already runs CrossPoint, except the Boox Picco.
+
+1. Copy your `firmware.bin` to the SD card. Also copy the official CrossPoint file for your device from [Releases](https://github.com/crosspoint-reader/crosspoint-reader/releases) so that you can restore the official firmware.
+2. Charge the device.
+3. On the device, open Settings → System → SD Card Firmware Update. Select your file and confirm.
+4. Wait until the device restarts. Do not press a button or remove the card.
+
+**Over USB.** This works on devices that are not USB-locked.
+
+- In a browser, open https://crosspointreader.com/#flash-tools, then select your device. Click `Custom .bin` and select your file.
+- For an X3 or X4, run this command:
+
+  ```bash
+  esptool.py --chip esp32c3 --port /dev/ttyACM0 --baud 921600 write_flash 0x10000 .pio/build/gh_release/firmware.bin
+  ```
+
+  For a device with an ESP32-S3, use `--chip esp32s3` and the firmware file for its environment.
+
+### After the installation
+
+The device starts with the theme it had before.
+
+1. Open Settings → Display → UI Theme and select Metro. This also sets Hide Battery % to Always. Change that setting afterward to show the percentage again.
+2. Open Settings → Display → Sleep Screen and select Lock Screen.
+
+### If something goes wrong
+
+- The theme does not work as it should. Select another theme in Settings. You can also put the SD card in a computer and set `"uiTheme": 1` in `/.crosspoint/settings.json`.
+- The firmware crashes. On the next start, the device uses the Lyra theme and shows a crash report. When the firmware fails to start twice in a row within a few seconds, the device goes back to the firmware in the other slot. This fallback only works when that slot holds a complete firmware, which is the case after an update from the SD card or over Wi-Fi.
+- To restore the official firmware, install the official file the same way. On most devices, hold the Up button together with Power while the device starts. This opens the firmware list on the SD card. On the X4 Pro and X4 Classic, hold Down. The M5PaperMono and the Boox Picco do not support this shortcut.
 
 ---
 

@@ -111,6 +111,8 @@ Upon turning the device on for the first time, you will be placed on the **[Home
 
 The Home screen is the main entry point to the firmware. From here you can navigate to **[Reading Mode](#4-reading-mode)** with the most recently read book, **[Browse Files](#33-browse-files-screen)**, the **[Library](#34-library-screen)**, **[File Transfer](#35-file-transfer-screen)**, or **[Settings](#36-settings)**.
 
+With the **Metro** theme, the Home screen is a grid of tiles in different shades of gray. The wide tile opens the most recently read book. The other large tiles open Browse Files, Library, Plugins or the OPDS Browser (when enabled), File Transfer and Settings. Small tiles show status, such as the battery level, the time and date on devices with a clock, the number of books, or the reading progress; which of them appear depends on the free space, and they cannot be selected. **Prev** and **Next** move the selection from tile to tile, **Select** opens a tile, and **Resume** opens the most recent book. While the device is idle, some tiles turn over to show more information. This stops after a short time and starts again at the next button press. Selecting the Metro theme sets **Hide Battery %** to **Always**; change that setting afterwards to show the percentage again.
+
 ### 3.2 Reading Mode
 
 See [Reading Mode](#4-reading-mode) below for more information.
@@ -221,6 +223,7 @@ Settings are grouped into **System**, **Display**, **Reader**, **Controls**, **L
   - "Quick resume" - The text of the last page read will be displayed on the sleep screen and a moon icon is shown on the edge of the screen. Waking up the device will return to the same page of the opened book. This is useful for quickly resuming reading without waiting for the device to fully wake up and load the book.
   - "Transparent" - A transparent overlay image drawn over the current screen; see [Sleep Screen](#37-sleep-screen) below for more information
   - "Cover + Transparent" - The transparent overlay image drawn over the cover of the last opened book, falls back to "Transparent" behavior if there is no book cover
+  - "Lock Screen" - A built-in gray triangle mosaic wallpaper that fills the screen; no image file is needed
 - **Sleep Screen Cover Mode**: How to display the book cover or custom sleep image:
   
   - "Fit" (default) - Scale the image to fit centered on the screen, padding with white borders as necessary
@@ -257,6 +260,7 @@ Settings are grouped into **System**, **Display**, **Reader**, **Controls**, **L
   - "Lyra" - The new theme for Crosspoint featuring rounded elements and menu icons
   - "Lyra Extended" - Lyra, but displays 3 books instead of 1 on the **[Home Screen](#31-home-screen)**
   - "RoundedRaff" - A rounded theme with additional visual styling
+  - "Metro" - A flat, square theme with a tile **[Home Screen](#31-home-screen)** in shades of gray. After a crash, the device shows the Lyra theme until the next restart or until a theme is selected in Settings. The saved theme is not changed.
 
 - **Sunlight Fading Fix**: Configure whether to enable a software-fix for the issue where white X4 models may fade when used in direct sunlight:
   
@@ -350,7 +354,7 @@ Settings are grouped into **System**, **Display**, **Reader**, **Controls**, **L
 
 - **Rebuild library index**: Rescan the SD card for books while preserving the arrival history of books already in the index.
 
-- **Check for updates**: Check for Crosspoint firmware updates over Wi-Fi. Firmware can also be updated without a USB connection by placing a `firmware.bin` file on the SD card. Neither option is available on the BOOX Picco, which is updated over USB.
+- **Check for updates**: Check for Crosspoint firmware updates over Wi-Fi. Firmware can also be updated without a USB connection by placing a `firmware.bin` file on the SD card. Neither option is available on the BOOX Picco, which is updated over USB. If the firmware crashes, and then crashes again within a few seconds of the next start, the device starts the firmware in the other firmware slot, when that slot holds a complete firmware. After an update over Wi-Fi or from the SD card, that is the firmware the device ran before the update.
 
 - **Plugins** (**Settings → Connectivity**): Enable or disable SD-card plugins. Clean installs start disabled; upgrades with existing plugins are kept enabled automatically. Disabling plugins leaves all plugin files on the SD card but stops plugin discovery and execution until they are enabled again.
   - Enabling plugins immediately adds **Plugins** to the Home screen, even when no plugins are installed yet. Sideloaded SD-card plugins work without Plugin Hub.
@@ -568,6 +572,7 @@ The **Sleep Screen** setting controls what is displayed when the device goes to 
 | **Cover + Custom** | The cover of the currently open book, shown only while actively reading. Falls back to **Custom** behavior when not reading. |
 | **Transparent**    | A BMP or PNG overlay drawn over the current screen. Supports PNG and 32-bit BGRA alpha transparency, and treats white as transparent in regular BMPs. Falls back to **Dark** if no valid overlay image is found. |
 | **Cover + Transparent** | The **Transparent** overlay drawn over the cover of the last opened book, from any screen. Falls back to **Transparent** behavior if there is no book cover, and to the plain cover if no valid overlay image is found. |
+| **Lock Screen**    | A built-in gray triangle mosaic wallpaper. The device creates the image on the SD card the first time it is used. Falls back to **Dark** if the image cannot be created. After a crash, **Dark** is shown instead until the next restart. |
 | **None**           | A blank screen.                                                                                                              |
 
 #### Cover settings
