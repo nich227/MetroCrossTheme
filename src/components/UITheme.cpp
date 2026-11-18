@@ -16,7 +16,9 @@
 #include "components/themes/BaseTheme.h"
 #include "components/themes/lyra/Lyra3CoversTheme.h"
 #include "components/themes/lyra/LyraTheme.h"
+#include "components/themes/metro/MetroTheme.h"
 #include "components/themes/roundedraff/RoundedRaffTheme.h"
+#include "uiFontSet.h"
 
 UITheme UITheme::instance;
 
@@ -33,6 +35,8 @@ void UITheme::reload() {
 bool UITheme::supportsCoverGrid() { return HalMemory::getPsramHeap().totalBytes > 0; }
 
 bool UITheme::hasCoverGridHome() { return SETTINGS.uiTheme == CrossPointSettings::COVER_GRID && supportsCoverGrid(); }
+
+bool UITheme::hasMetroHome() { return SETTINGS.uiTheme == CrossPointSettings::METRO; }
 
 void UITheme::drawCoverGridHome(CoverGridHomeUi& home) { home.renderUi(); }
 
@@ -68,8 +72,20 @@ void UITheme::setTheme(CrossPointSettings::UI_THEME type) {
       currentTheme = std::make_unique<Lyra3CoversTheme>();
       currentMetrics = &Lyra3CoversMetrics::values;
       break;
+    case CrossPointSettings::UI_THEME::METRO: {
+      auto theme = makeUniqueNoThrow<MetroTheme>();
+      if (!theme) {
+        LOG_ERR("UI", "OOM: Metro theme");
+        return;
+      }
+      currentTheme = std::move(theme);
+      currentMetrics = &MetroMetrics::values;
+      LOG_DBG("UI", "Using Metro theme");
+      break;
+    }
   }
   metricsValid = false;
+  useMetroUiFonts(type == CrossPointSettings::UI_THEME::METRO);
 }
 
 const ThemeMetrics& UITheme::getMetrics() const {
