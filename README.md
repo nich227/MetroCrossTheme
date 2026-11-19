@@ -13,6 +13,8 @@ Check [our Devices page](https://crosspointreader.com/devices) for the full list
 
 ![CrossPoint Reader running on Xteink device](./docs/images/cover.jpg)
 
+> This tree adds the **Metro** theme, a tile interface in tones of gray. See [Metro theme build](#metro-theme-build) for screenshots, build steps and install steps.
+
 > If you're planning to buy an Xteink device, consider purchasing an **X3/X4 Developer Edition** through https://crosspointreader.com. CrossPoint receives a small share of each sale, helping fund development costs.
 
 ## What can CrossPoint do?
@@ -134,11 +136,39 @@ See [Development quick start](#development-quick-start) below.
 
 ## Metro theme build
 
-This tree is CrossPoint 2.0.0 with these additions:
+![The Metro theme: the Home screen, the Home screen after two tiles turned over, the Settings screen, and the Lock Screen sleep screen](./docs/images/metro/metro-screens.png)
 
-- The Metro theme has a flat style based on the Windows Phone 8 Start screen. The Home screen uses a grid of tiles in different tones of gray. The tiles turn over to show more information and swing away when you open one.
-- Lock Screen sleep mode uses a gray triangle mosaic that the device generates automatically.
-- Startup fallback returns the device to the firmware it ran before the update when the current firmware fails to start twice in a row.
+*Captures from the desktop simulator at the Xteink X3 screen size, with the optional Segoe UI fonts.*
+
+This tree is CrossPoint 2.0.0 with the Metro theme. Metro uses a flat interface styled after the Windows Phone 8 Start screen. It uses tones of gray for an e-ink screen.
+
+### Metro features
+
+Home screen:
+
+- A grid of tiles replaces the menu list. The wide tile opens the book you read last. The other tiles open Browse Files, Library, File Transfer, and Settings. A tile for Plugins or the OPDS Browser appears when one of them is enabled.
+- Each tile uses one of nine tones of gray, from white to black. The screen shows only black and white pixels, so fine dot patterns create each gray, as on the first Macintosh.
+- Small status tiles show the battery level, time, and date. A device without a clock shows the number of books and reading progress instead of the time and date.
+- The tiles are live. While the device is idle, some tiles turn over to show more. The book tile shows your reading progress. The Library tile shows the number of books and your recent books. The OPDS tile shows the number of servers. After 12 turns, the tiles stop until the next button press.
+- When you open a tile, the other tiles swing to the left. They swing back when you return to the Home screen.
+- The selected tile has a frame and a check mark in its corner. The button bar shows Prev and Next because the selection moves through the tiles in reading order.
+
+Other screens:
+
+- Lists use a black selection bar. Button hints use white labels on a black bar, and popups are black blocks.
+- With the Segoe UI fonts, page titles are large, light, and lowercase.
+- The status bar shows the battery symbol without the percentage unless you change Hide Battery %.
+
+Sleep screen:
+
+- The Lock Screen sleep mode shows a mosaic of triangles in seven tones of gray. The device draws it once for its screen size and keeps it on the SD card.
+
+Safety:
+
+- If the firmware fails to start twice in a row, the device returns to the firmware it ran before the update.
+- After a crash, the device shows the Lyra theme until the next restart. Your saved theme does not change.
+
+The Home screen icons are [Ant Design](https://github.com/ant-design/ant-design-icons) icons (MIT license).
 
 The firmware reports its version as `2.0.0-metro.1` on the start screen and in Settings. **Check for updates** compares only the three numbers, so it does not offer official 2.0.0. It offers a later official release, and installing that release removes the additions.
 
@@ -222,12 +252,17 @@ Read [USB-locked devices](#usb-locked-devices-xteink-unlocker) first. You can up
 
   For a device with an ESP32-S3, use `--chip esp32s3` and the firmware file for its environment.
 
-### After the installation
+### Turn on the Metro theme
 
-The device starts with the theme it had before.
+After installation, the device starts with its previous theme. Metro is not active until you select it.
 
-1. Open Settings → Display → UI Theme and select Metro. This also sets Hide Battery % to Always. Change that setting afterward to show the percentage again.
-2. Open Settings → Display → Sleep Screen and select Lock Screen.
+1. On the Home screen, open Settings, then Display.
+2. Select UI Theme and choose Metro. The screen changes at once. Return to the Home screen to see the tiles.
+3. To use the triangle mosaic as the sleep screen, select Sleep Screen in the same list and choose Lock Screen.
+
+Selecting Metro also sets Hide Battery % to Always. To show the percentage again, set Hide Battery % to Never in the same list. The setting then stays as you set it.
+
+**Night Mode** works with Metro. It turns the light tiles dark and the dark tiles light. To leave Metro, choose another theme in UI Theme.
 
 ### If something goes wrong
 
